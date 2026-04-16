@@ -1,0 +1,3 @@
+[submodule "symbolic_tensor_graph"]
+	path = symbolic_tensor_graph
+	url = https://github.com/PeisongZhang/symbolic_tensor_graph.git
