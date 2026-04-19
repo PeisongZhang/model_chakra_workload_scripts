@@ -15,32 +15,39 @@ case "${ATTENTION}" in
         ;;
 esac
 
+# Parallelism degrees. Total NPUs = DP * TP * PP * SP.
+DP=${DP:-4}
+TP=${TP:-8}
+PP=${PP:-4}
+SP=${SP:-1}
+
 SGD=${SGD:-standard}
 LAYER=${LAYER:-4}
-MICROBATCH=${MICROBATCH:-8}
+SEQUENCE=${SEQUENCE:-4096}
+BATCH=${BATCH:-128}
+# Per-rank micro-batch size (Megatron convention).
+MICROBATCH=${MICROBATCH:-2}
 
-# if SGD = standard, then DP_LOCAL_SGD_INTERVAL should be 1, otherwise it should be greater than 1.
-# else INTERVAL = NUM_ITERATIONS
-NUM_ITERATIONS=${NUM_ITERATIONS:-1}
+ITERATION=${ITERATION:-1}
 if [ "${SGD}" = "standard" ]; then
     DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-1}
 else
-    DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-${NUM_ITERATIONS}}
+    DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-${ITERATION}}
 fi
 
-OUTPUT_DIR=${SCRIPT_DIR}/${ATTENTION}_${SGD}_${LAYER}_${MICROBATCH}_${NUM_ITERATIONS}
+OUTPUT_DIR=${SCRIPT_DIR}/${ATTENTION}_${SGD}_${LAYER}_${ITERATION}_${BATCH}_${MICROBATCH}_${SEQUENCE}
 
 # Run Symbolic Tensor Graph (STG) Generator for Qwen-32B.
 (
 cd ${STG}
 python3 main.py --output_dir "${OUTPUT_DIR}" \
                 --output_name workload.%d.et \
-               --dp 4 --tp 8 --pp 4 \
-               --seq 4096 --batch 128 \
+               --dp "${DP}" --tp "${TP}" --pp "${PP}" --sp "${SP}" \
+               --seq "${SEQUENCE}" --batch "${BATCH}" \
                 --dvocal 152064 --dmodel 5210 --dff 27648 \
                --head 40 --kvhead 8 --num_stacks "${LAYER}" \
                --micro_batch "${MICROBATCH}" \
-                --num_iterations "${NUM_ITERATIONS}" \
+                --num_iterations "${ITERATION}" \
                 --dp_local_sgd_interval "${DP_LOCAL_SGD_INTERVAL}" \
                 --model_type llama \
                 --mixed_precision true \
