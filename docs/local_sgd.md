@@ -23,7 +23,7 @@
 
 - `python3 main.py`
 - `--dp 4 --tp 1 --pp 4`
-- `--seq 8192 --batch 128 --micro_batch 8`
+- `--seq 8192 --batch 128 --micro_batch 2`（per-rank micro-batch，Megatron 习惯）
 - `--model_type llama --weight_sharded 0`
 
 默认情况下，这会在 `llama/` 下生成每个 rank 的 Chakra ET（如 `llama.0.et`）和通信组文件 `llama.json`；  
@@ -49,43 +49,22 @@
 因此：默认链路仍然会周期性地在图中保留 DP all-reduce；  
 只有显式打开新参数时，才会在生成阶段切换成 LocalSGD workload。
 
-### 补充：这里的 `micro_batch` 语义与常见 PP 训练定义不一致
+### 补充：`micro_batch` 语义已对齐 Megatron 习惯
 
-这次进一步核查后，可以更明确地说：**当前 STG / Chakra workload 中的 `micro_batch`，并不是多维并行训练里常说的“PP 调度 micro-batch”语义。**
-
-在常见的 DP+PP 训练定义里：
-
-- `batch` 通常表示 **global batch size**；
-- `micro_batch` 通常表示 **每个 pipeline slot / 每个 rank 一次前反向处理的样本数**；
-- 因此一个 optimizer step 内的 PP micro-batch 数通常应为：
+`main.py` 现在按 Megatron / GPipe 惯例处理 `--micro_batch`：它表示**每张卡一次前反向处理的样本数**，一个 optimizer step 内的 micro-batch 数为
 
   `num_micro_batches = batch / (dp * micro_batch)`
 
-对本例 `dp=4, batch=128, micro_batch=2`，若按这个标准定义，应得到：
+具体实现：`main.py` 在写入符号表时令 `MicroBatch = args.micro_batch * args.dp`，使各张量保留的 `Batch/dp` 形状在替换后等于 `args.micro_batch`。`MicroBatchReplicator.apply(...)` 仍按 `Batch / MicroBatch` 计数，因而总份数自动落到 `batch / (dp * micro_batch)`。
 
-- `128 / (4 * 2) = 16` 个 PP micro-batches。
+对本例 `dp=4, batch=128, micro_batch=2`：
 
-但当前 STG 实现并不是这样算的。`main.py` 只是把 `Batch=args.batch`、`MicroBatch=args.micro_batch` 原样塞进符号表；随后 `MicroBatchReplicator.apply(...)` 直接用：
+- `128 / (4 * 2) = 16` 个 `mb*`；
+- 每个 `mb*` 在每张卡上携带 2 个样本。
 
-- `num_batches = Batch / MicroBatch`
+梯度通信插入逻辑会先合并同 step 内所有 `mb*` 的本地梯度，再把 `PARTIALSUM -> DUPLICATED` 的 step 级转换映射成 `ALL_REDUCE`。因此 ET 中的 DP collective 表示**每个 iteration 末尾一次** DP 同步，而不是“每个 `mb*` 都触发一次 DP 同步”。
 
-来复制图，并生成 `mb0`, `mb1`, ... 这些前缀。也就是说，本例实际被展开成：
-
-- `128 / 2 = 64` 个 `mb*`
-
-而**没有除以 `dp`**。这与标准 PP micro-batch 计数方式不同。
-
-进一步地，修复后的梯度通信插入逻辑会先把所有 `mb*` 的本地梯度合并，再把 `PARTIALSUM -> DUPLICATED` 的 step 级转换映射成 `ALL_REDUCE`。因此 ET 中看到的 collective，更准确地表示的是：
-
-- 一个 iteration / step 末尾的 DP `ALL_REDUCE`；
-- 而不是“每个 `mb*` 都触发一次 DP 同步”。
-
-所以，从建模语义上更准确的说法是：
-
-- 这里的 `mb*` 更接近 **被 STG 显式复制出来的 local training chunk / local step**；
-- 不是标准 1F1B / GPipe 文献语境下、服务于 PP 调度和梯度累积的那种 micro-batch。
-
-这也是为什么**默认 workload** 不适合直接拿来表示 LocalSGD：它默认假设**每个 iteration 结束都进行一次同步 DP 梯度聚合**。
+默认 workload（`NUM_ITERATIONS=1, DP_LOCAL_SGD_INTERVAL=1`）仍是同步 DP；要表达 LocalSGD 需显式打开下面两个参数。
 
 ---
 
@@ -98,7 +77,7 @@ python3 main.py \
   --output_dir generated_local_sgd/ \
   --output_name workload.%d.et \
   --dp 4 --tp 1 --pp 4 \
-  --batch 128 --micro_batch 8 \
+  --batch 128 --micro_batch 2 \
   --num_iterations 4 \
   --dp_local_sgd_interval 2
 ```
