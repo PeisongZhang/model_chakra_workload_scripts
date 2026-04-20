@@ -64,6 +64,10 @@ FlashAttention 的核心不是“近似注意力”，而是 **IO-aware exact at
 - 局限：它解决的是 attention kernel 效率，不解决 optimizer state、参数分片、跨机通信这些问题。
 - 建模含义：如果做系统仿真，FlashAttention 应体现为 **相同语义、更低显存峰值、更低 IO、更好的 kernel 效率**，而不是简单把 `O(S^2)` 改成线性。
 
+### 2.5 在本仓库的状态
+
+已在 STG 中落地：`--attention_backend flash`（或旧参数 `--flash_attention true`）会切到 `group_query_attention_kernel_flash.csv`，保留 $4BHS^2d$ 前向 FLOPs 和 2.5× 的反向/前向比，同时避免 $S \times S$ tensor 物化。细节见 [flash_attention.md](flash_attention.md)。
+
 ## 3. ZeRO / FSDP 系列
 
 ### 3.1 要解决什么问题
@@ -217,6 +221,18 @@ ZeRO 的基本逻辑是：既然 Data Parallel 的多张卡上原本存着大量
 - 真实系统中通常是多种技术叠加：  
   `TP + PP + DP + ZeRO/FSDP + FlashAttention + Checkpointing`
 
+### 7.3 在本仓库的状态
+
+STG 已支持 TP/PP/DP/SP/EP 五轴并行以及 Megatron-LM PTD-P 的多个关键特性：
+
+- `--pipeline_schedule {natural, gpipe, 1f1b, 1f1b-interleaved}`
+- `--pipeline_virtual_stages v`（interleaved 1F1B）
+- `--scatter_gather_optimization`（Megatron-LM §4.1 的 PP 边界 scatter/gather）
+- `--activation_recompute`（FLOPs +1×fwd，显存按保留率粗缩）
+- `--weight_sharded`（ZeRO/FSDP 风格权重分片）
+
+配置和验证方法见 [PDT/README.md](PDT/README.md) 与 [README.md](README.md)。
+
 ## 8. 通信优化：Local SGD 与压缩
 
 ### 8.1 Local SGD
@@ -243,6 +259,10 @@ ZeRO 的基本逻辑是：既然 Data Parallel 的多张卡上原本存着大量
 
 - Local SGD 会改变优化轨迹，不是单纯系统层透明优化。
 - 8-bit optimizer 一般更偏工程实用，但对大规模训练的显存收益很直接。
+
+### 8.4 在本仓库的状态
+
+STG 已支持 LocalSGD workload 生成：`--num_iterations N` 复制 iteration，`--dp_local_sgd_interval K` 只在满足 `(iter+1) % K == 0` 的 iteration 上保留 DP `ALL_REDUCE`。默认值都为 `1`，行为仍是同步 DP。详见 [local_sgd.md](local_sgd.md)。
 
 ## 9. 低精度训练：FP16 / BF16 / FP8
 
@@ -327,17 +347,17 @@ ZeRO 的基本逻辑是：既然 Data Parallel 的多张卡上原本存着大量
 - Paulius Micikevicius et al. **Mixed Precision Training**. ICLR 2018.
 - **FP8 Formats for Deep Learning**. 2022.
 
-## 13. 对你这个目录下工作的直接启发
+## 13. 对本仓库工作的直接启发
 
-结合当前 `demo3` 目录里已有的材料，可以把这些技术粗略分成三类：
+结合 `dnn_workload/` 目录里已有的材料，可以把这些技术粗略分成三类：
 
-- 已经直接相关的：`FlashAttention`、`Local SGD`
-- 非常适合后续继续建模的：`ZeRO/FSDP`、`Ring Attention`、`Ulysses`
-- 更偏模型结构变化的：`Sliding Window / Longformer / BigBird`
+- **已经建模落地**：`FlashAttention`（[flash_attention.md](flash_attention.md)）、`Local SGD`（[local_sgd.md](local_sgd.md)）、`TP/PP/DP/SP/EP` 骨架 + Megatron PTD-P 关键特性（[PDT/README.md](PDT/README.md)）、`FSDP` 权重分片（`--weight_sharded`）、`Activation Recomputation`（`--activation_recompute`）
+- **非常适合后续继续建模**：ZeRO-1/2（更细粒度的 optimizer state / gradient 分片状态机，目前只支持 ZeRO-3/FSDP 风格）、`Ring Attention`、`DeepSpeed-Ulysses` 这类长序列分布式 exact attention
+- **更偏模型结构变化**：`Sliding Window / Longformer / BigBird` 这类稀疏/局部 attention，需要改 kernel CSV 的连接图
 
-如果目标是做 ASTRA-sim / Chakra 侧的训练系统建模，优先级通常建议是：
+如果目标是继续扩 ASTRA-sim / Chakra 侧的训练系统建模，下一步的优先级建议是：
 
-1. 先做 `FlashAttention`
-2. 再做 `ZeRO/FSDP`
-3. 然后做长序列分布式 attention，例如 `Ring Attention` 或 `Ulysses`
+1. 长序列分布式 exact attention（`Ring Attention` / `Ulysses`）——会显著改变跨卡通信模式，对 Astra-sim 仿真最有价值
+2. 更细粒度的 `ZeRO-1/2` 状态机，区分 optimizer state / gradient / parameter 三种分片触发的通信
+3. 低精度（`FP8` / 8-bit optimizer）对张量尺寸与带宽的影响
 4. 最后再考虑 `Sliding Window` 这类会改模型语义的稀疏 attention

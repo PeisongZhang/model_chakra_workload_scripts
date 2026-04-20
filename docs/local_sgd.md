@@ -26,8 +26,9 @@
 - `--seq 8192 --batch 128 --micro_batch 2`（per-rank micro-batch，Megatron 习惯）
 - `--model_type llama --weight_sharded 0`
 
-默认情况下，这会在 `llama/` 下生成每个 rank 的 Chakra ET（如 `llama.0.et`）和通信组文件 `llama.json`；  
-若 `NUM_ITERATIONS > 1` 或 `DP_LOCAL_SGD_INTERVAL > 1`，脚本默认改为输出到 `llama_local_sgd/`。
+脚本实际输出到由 `ATTENTION`, `SGD`, `LAYER`, `ITERATION`, `BATCH`, `MICROBATCH`, `SEQUENCE` 拼成的目录，例如默认参数下为
+`standard_standard_32_8_128_2_8192/`，内部文件名是 `workload.%d.et` 和 `workload.json`（见 `llama3_8b.sh:38`）。
+开启 LocalSGD 时通常写成 `SGD=local`（或 `local_sgd`），对应目录前缀就会带上那个标识。
 
 在 STG 主流程（`symbolic_tensor_graph/main.py`）中，执行顺序是：
 
@@ -64,7 +65,7 @@
 
 梯度通信插入逻辑会先合并同 step 内所有 `mb*` 的本地梯度，再把 `PARTIALSUM -> DUPLICATED` 的 step 级转换映射成 `ALL_REDUCE`。因此 ET 中的 DP collective 表示**每个 iteration 末尾一次** DP 同步，而不是“每个 `mb*` 都触发一次 DP 同步”。
 
-默认 workload（`NUM_ITERATIONS=1, DP_LOCAL_SGD_INTERVAL=1`）仍是同步 DP；要表达 LocalSGD 需显式打开下面两个参数。
+默认 workload（`ITERATION=1, DP_LOCAL_SGD_INTERVAL=1`）仍是同步 DP；要表达 LocalSGD 需显式打开下面两个参数。
 
 ---
 
@@ -91,14 +92,16 @@ python3 main.py \
 ### 直接用 `llama3_8b.sh`
 
 ```bash
-NUM_ITERATIONS=4 DP_LOCAL_SGD_INTERVAL=2 ./llama3_8b.sh
+ITERATION=4 SGD=local DP_LOCAL_SGD_INTERVAL=2 ./llama3_8b.sh
 ```
 
-脚本会自动：
+关键点（见 `llama3_8b.sh`）：
 
-- 把新参数透传给 `main.py`
-- 在开启 LocalSGD 时默认输出到 `llama_local_sgd/`
-- 保留默认同步 DP 的原有 `llama/` 输出路径
+- `ITERATION` 透传到 `--num_iterations`
+- `DP_LOCAL_SGD_INTERVAL` 透传到 `--dp_local_sgd_interval`
+- `SGD` 只是一个标签：默认 `standard` 会强制 `DP_LOCAL_SGD_INTERVAL=1`（同步 DP）；
+  非 `standard`（例如 `local`、`local_sgd`）时，`DP_LOCAL_SGD_INTERVAL` 默认等于 `ITERATION`，也就是“一个 trace 里只做一次 DP 同步”
+- 输出目录名自动带上 `SGD` 标签，方便同目录里同时放同步 DP 和 LocalSGD 两份 trace
 
 ## 4) 当前实现方式
 

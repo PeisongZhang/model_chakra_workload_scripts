@@ -196,6 +196,20 @@ $$
 
 如果带 bias，再额外加 $4d$，但现代 LLM 往往去掉 bias。
 
+#### GQA / MQA 下的修正
+
+现代 LLM（LLaMA-3、Qwen 等）普遍用 **GQA / MQA**：K、V 共享 $h_{kv} < h$ 个头（例如 LLaMA-3 8B 是 `head=32, kvhead=8`）。
+
+记 $r = h_{kv} / h$，则：
+
+- $W_Q \in \mathbb{R}^{d \times d}$ 不变
+- $W_K, W_V \in \mathbb{R}^{d \times rd}$
+- $W_O \in \mathbb{R}^{d \times d}$ 不变
+
+参数量从 $4d^2$ 降到 $(2 + 2r)d^2$，对应 K/V 投影的 FLOPs 也按 $r$ 缩减。Attention core（$QK^T$ 和 $PV$）的 FLOPs 基本不变——K/V head 会广播给同一组 Q head。KV cache 的显存则直接按 $r$ 缩，这是 GQA 在推理场景最关键的收益。
+
+本仓库 STG 的 Llama kernel（`group_query_attention_kernel*.csv`）就是按 GQA 建模的，见 [flash_attention.md](flash_attention.md)。
+
 ### 3.3.2 Attention 的前向 FLOPs
 
 先看四部分。
@@ -532,7 +546,7 @@ $$
 ### Attention 投影
 
 $$
-8BSd^2 = 8 \times 1 \times 4096 \times 4096^2 \approx 1.37 \times 10^{11}
+8BSd^2 = 8 \times 1 \times 4096 \times 4096^2 \approx 5.50 \times 10^{11}
 $$
 
 ### Attention 核心
@@ -549,11 +563,13 @@ $$
 \approx 1.44 \times 10^{12}
 $$
 
-这个例子说明，在很多现代 LLM 配置里：
+三者的大致比例为 `MLP : 投影 : core ≈ 5.2 : 2 : 1`（此例 $S=d$，还没过 $S=2d$ 的交叉点，所以 core 暂时最轻）。这说明：
 
-- MLP 非常重
-- 长序列时 attention core 也很重
-- 真正的总成本通常是两者一起大，而不是只看 $S^2$
+- MLP 非常重，在中短序列下是主项
+- Attention 投影项（$8BSd^2$）不可忽略，经常比 core 还大
+- 随 $S$ 增大，attention core（$4BS^2d$）增长最快，超过 $S=2d$ 后反超投影项；继续增长到 $S \sim d_{ff}$（经典 FFN，对应本例 $\sim$14k）时，会逼近 MLP
+
+真正的总成本通常是三项一起大，而不是只看 $S^2$。
 
 ## 8. 经典 Transformer 和现代 LLM 的几个差别
 

@@ -125,15 +125,17 @@ sharding_spreadsheets/module3/
 
 ### 4.1 选择 Attention kernel
 
-`llama3_8b.sh` 现在统一使用一个环境变量 `ATTENTION_BACKEND` 选择注意力实现，不再需要单独的 `FLASH_ATTENTION` 开关：
+`llama3_8b.sh` / `qwen_32b.sh` 统一使用环境变量 `ATTENTION` 选择注意力实现，默认 `standard`：
 
 ```bash
-ATTENTION_BACKEND=standard ./llama3_8b.sh
-ATTENTION_BACKEND=fused ./llama3_8b.sh
-ATTENTION_BACKEND=flash ./llama3_8b.sh
+ATTENTION=standard ./llama3_8b.sh   # 默认；显式 QK^T/softmax/PV einsum
+ATTENTION=fused    ./llama3_8b.sh   # 单 CUSTOM op，线性 FLOPs 近似
+ATTENTION=flash    ./llama3_8b.sh   # 单 CUSTOM op，保留 O(S²) FLOPs，不物化 S×S
 ```
 
-如果直接调用 `main.py`，仍然推荐使用 `--attention_backend {standard,fused,flash}`；`--flash_attention true` 仅保留为兼容旧接口的写法。
+脚本里的分支位于 `llama3_8b.sh:8` / `qwen_32b.sh:8`，再把值透传给 `main.py --attention_backend`。
+
+如果直接调用 `main.py`，推荐使用 `--attention_backend {auto,standard,fused,flash}`（默认 `auto`）。`--flash_attention true` 仍被接受，仅为兼容旧接口——此时 `--attention_backend` 必须是 `auto` 或 `flash`，否则 `main.py` 会抛错。
 
 ### 4.2 对仿真结果的影响
 
