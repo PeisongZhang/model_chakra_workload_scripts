@@ -14,6 +14,8 @@
 | 6 | `phase2_3_completion_zh.md` | P2 + P3 落地报告（bubble/带宽统计、roofline derate、VRAM cap、多 NIC 拓扑） | 同上 |
 | 7 | `reference_zh.md` | **配置参考**：新增 CLI/env/JSON 字段汇总对照表 | 使用时速查 |
 | 8 | `experiments_zh.md` | **复现配方**：针对论文 takeaway 的最小实验 | 做验证实验 |
+| 9 | `correctness_todo.md` | **正确性排期**：跑 Megatron-39B/76B 后发现的 4 项真·bug / 失真，按 P0/P1 排期 | 修 bug 的人 |
+| 10 | `optional_todo.md` | **Optional 改进**：工程效率、对标精度、扩展性增强 | 有余力时挑做 |
 
 ## 原始 PDF 与页面渲染
 
