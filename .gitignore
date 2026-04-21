@@ -215,3 +215,4 @@ llama*/*
 qwen*/*
 *.et
 workload.json
+.claude
