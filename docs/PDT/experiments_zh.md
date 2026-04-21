@@ -149,7 +149,7 @@ ACTIVATION_RECOMPUTE=true DP=4 TP=8 PP=4 LAYER=32 BATCH=128 MICROBATCH=2 \
 # 把 analytical.sh 的 WORKLOAD_DIR 指向 ..._artrue/ 重跑
 ```
 
-此时 peak 应降到 ~cap 以下（重算 keep_ratio=0.2 的效果）。
+此时 peak 应降到 ~cap 以下。权威峰值以 ASTRA-sim `sys[N] peak memory usage` 为准——`correctness_todo.md` §3 已移除 STG 侧硬编码的 `keep_ratio=0.2`，STG 的 `acts` 只当上界参考。
 
 ---
 

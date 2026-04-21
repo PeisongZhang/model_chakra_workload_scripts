@@ -9,7 +9,7 @@ Phase 0–3 新增的所有 CLI 参数、环境变量与 JSON 字段汇总表。
 | `--pipeline_virtual_stages` | int | 1 | P0‑B | 每个设备的虚拟 pipeline stage 数 $v$（model chunks/device）。$v>1$ 时启用 Megatron 交错式，要求 `num_stacks % (v*pp) == 0` |
 | `--pipeline_schedule` | choice | `natural` | P0‑A | 流水调度策略：`natural` / `gpipe` / `1f1b` / `1f1b-interleaved` |
 | `--scatter_gather_optimization` | bool | false | P1‑A | 启用 Megatron §4.1 scatter/gather。每个 TP rank 只发 1/t 跨 PP 片段 + NVLink all-gather |
-| `--activation_recompute` | bool | false | P1‑B | 启用 §3.5 激活重算。对 transformer block 的 backward COMP 抬升一次 forward 的 FLOP；`--print_gpu_vram` 报告中 acts 按 keep_ratio=0.2 粗缩 |
+| `--activation_recompute` | bool | false | P1‑B | 启用 §3.5 激活重算。对 transformer block 的 backward COMP 抬升一次 forward 的 FLOP；`--print_gpu_vram` 报告中 AR=on 时仅输出 acts 上界并指向 ASTRA-sim `peak memory usage`（权威峰值，见 correctness_todo.md §3） |
 
 已存在但本次重点使用的参数（完整清单见 `main.py --help`）：
 - `--dp / --tp / --pp / --sp`（四种并行度）
@@ -47,7 +47,8 @@ Phase 0–3 新增的所有 CLI 参数、环境变量与 JSON 字段汇总表。
 |------|------|------|-------|------|
 | `peak-perf` | number (TFLOP/s) | 0 | – | A100 FP16 设 312 |
 | `roofline-enabled` | 0/1 | 0 | – | 必须为 1 才启用 Roofline |
-| `peak-perf-achievable-fraction` | double | 1.0 | P2‑B | 峰值 peak 与 bw 同乘此系数。模拟算子融合/launch overhead 缺口；设 0.8 近似论文 §5.8 的 ~20% 差距 |
+| `peak-perf-achievable-fraction` | double | 1.0 | P2‑B | 峰值 peak 与 bw 同乘此系数（**全局 fallback**）。模拟算子融合/launch overhead 缺口；设 0.8 近似论文 §5.8 的 ~20% 差距 |
+| `peak-perf-per-op-category` | object | – | correctness_todo §4 | 按算子类别覆写 peak。键：`GEMM / ELEMWISE / SOFTMAX / REDUCE / OTHER`（或 0..4 数字），值：TFLOP/s。未列出的类别回退 `peak-perf`。与 `peak-perf-achievable-fraction` 相乘（后者充当顶层 fallback）。STG 侧通过 Chakra COMP_NODE 的 `op_category` int32 attr 告知节点类别 |
 | `track-local-mem` | 0/1 | 0 | P3‑A | 开启后 `sys[N] peak memory usage` 写入日志；本次实验默认开 |
 | `vram-capacity-gb` | double | 0 | P3‑A | 硬性 VRAM 上限（GB）。0 = 无上限。超出后日志打印 `VRAM OVERFLOW` warn |
 | `local-mem-trace-filename` | string | `local_mem_trace` | 已存在 | track-local-mem 的 trace 输出文件名 |
@@ -101,7 +102,8 @@ Phase 0–3 新增的所有 CLI 参数、环境变量与 JSON 字段汇总表。
 | §2.2.1 GPipe (all F then all B) | `PP_SCHEDULE=gpipe` |
 | §3.5 激活重算 | `ACTIVATION_RECOMPUTE=true` |
 | §4.1 scatter/gather | `SGO=true` |
-| §5.8 算子融合 effect (粗略) | `peak-perf-achievable-fraction: 0.8`（JSON） |
+| §5.8 算子融合 effect (粗略) | `peak-perf-achievable-fraction: 0.8`（JSON，全局 fallback） |
+| §5.8 算子融合 effect (分算子) | `peak-perf-per-op-category: {GEMM:312, ELEMWISE:90, SOFTMAX:60, REDUCE:40}`（JSON） |
 | §5.9 多 NIC 聚合带宽 | `generate_topology.py --nics-per-gpu 8` |
 | §3.3 bubble 占比观测 | 读 `Bubble time:` 日志字段（需 `PP_SCHEDULE != natural`） |
 | §5.9 有效二分带宽观测 | 读 `Effective BW:` 日志字段 |
