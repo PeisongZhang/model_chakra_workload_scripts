@@ -210,3 +210,7 @@ __marimo__/
 *.et
 workload.json
 .claude
+
+# 运行产物
+idmap.txt
+logout.dat
