@@ -9,7 +9,6 @@ set -e
 
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 STG=${SCRIPT_DIR}/../symbolic_tensor_graph
-PY=${PYTHON:-/home/ps/sow/part2/astra-sim/.venv/bin/python}
 
 ATTENTION=${ATTENTION:-fused}
 case "${ATTENTION}" in
@@ -24,6 +23,7 @@ DP=${DP:-32}
 TP=${TP:-8}
 PP=${PP:-4}
 SP=${SP:-1}
+EP=${EP:-1}
 
 SGD=${SGD:-standard}
 LAYER=${LAYER:-80}
@@ -31,7 +31,7 @@ SEQUENCE=${SEQUENCE:-2048}
 BATCH=${BATCH:-1792}
 MICROBATCH=${MICROBATCH:-2}
 
-ITERATION=${ITERATION:-1}
+ITERATION=${ITERATION:-4}
 if [ "${SGD}" = "standard" ]; then
     DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-1}
 else
@@ -43,7 +43,7 @@ PP_VIRTUAL=${PP_VIRTUAL:-1}
 SGO=${SGO:-1}
 ACTIVATION_RECOMPUTE=${ACTIVATION_RECOMPUTE:-1}
 
-OUTPUT_DIR=${SCRIPT_DIR}/${ATTENTION}_${SGD}_${LAYER}_${ITERATION}_${BATCH}_${MICROBATCH}_${SEQUENCE}_${PP_SCHEDULE}_v${PP_VIRTUAL}_sgo${SGO}_ar${ACTIVATION_RECOMPUTE}
+OUTPUT_DIR=${SCRIPT_DIR}/att${ATTENTION}_sgd${SGD}_layer${LAYER}_iter${ITERATION}_batch${BATCH}_micro${MICROBATCH}_seq${SEQUENCE}_dp${DP}_tp${TP}_pp${PP}_sp${SP}_ep${EP}_ar${ACTIVATION_RECOMPUTE}
 
 SGO_ARGS=()
 [ "${SGO}" = "1" ] && SGO_ARGS+=(--scatter_gather_optimization true)
@@ -56,7 +56,7 @@ echo "[llama3_70b] OUTPUT_DIR=${OUTPUT_DIR}"
 
 (
 cd "${STG}"
-"${PY}" main.py --output_dir "${OUTPUT_DIR}" \
+python3 main.py --output_dir "${OUTPUT_DIR}" \
                 --output_name workload.%d.et \
                 --dp "${DP}" --tp "${TP}" --pp "${PP}" --sp "${SP}" \
                 --seq "${SEQUENCE}" --batch "${BATCH}" \

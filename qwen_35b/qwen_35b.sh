@@ -34,7 +34,7 @@ EXPERTS=${EXPERTS:-256}
 KEXPERTS=${KEXPERTS:-8}
 
 # Pipeline-schedule controls.
-PP_SCHEDULE=${PP_SCHEDULE:-natural}
+PP_SCHEDULE=${PP_SCHEDULE:-1f1b}
 PP_VIRTUAL=${PP_VIRTUAL:-1}
 case "${PP_SCHEDULE}" in
     natural|gpipe|1f1b|1f1b-interleaved)
@@ -55,7 +55,7 @@ else
     DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-${ITERATION}}
 fi
 
-OUTPUT_DIR=${SCRIPT_DIR}/${ATTENTION}_${SGD}_${LAYER}_${ITERATION}_${BATCH}_${MICROBATCH}_${SEQUENCE}_${PP_SCHEDULE}_v${PP_VIRTUAL}_sgo${SGO}_ar${ACTIVATION_RECOMPUTE}_ep${EP}_e${EXPERTS}k${KEXPERTS}
+OUTPUT_DIR=${SCRIPT_DIR}/att${ATTENTION}_sgd${SGD}_layer${LAYER}_iter${ITERATION}_batch${BATCH}_micro${MICROBATCH}_seq${SEQUENCE}_dp${DP}_tp${TP}_pp${PP}_sp${SP}_ep${EP}
 
 # Qwen3.5-MoE config (from qwen_35b_config.json):
 #   hidden_size (Dmodel) = 2048

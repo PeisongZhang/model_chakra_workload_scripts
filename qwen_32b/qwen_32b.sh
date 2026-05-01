@@ -20,6 +20,7 @@ DP=${DP:-4}
 TP=${TP:-8}
 PP=${PP:-4}
 SP=${SP:-1}
+EP=${EP:-1}
 
 SGD=${SGD:-standard}
 LAYER=${LAYER:-4}
@@ -34,7 +35,7 @@ MICROBATCH=${MICROBATCH:-2}
 #   PP_VIRTUAL : virtual stages per device (v). v=1 is contiguous mapping;
 #     v>1 enables Megatron interleaved pipeline and requires
 #     LAYER % (PP_VIRTUAL * PP) == 0.
-PP_SCHEDULE=${PP_SCHEDULE:-natural}
+PP_SCHEDULE=${PP_SCHEDULE:-1f1b}
 PP_VIRTUAL=${PP_VIRTUAL:-1}
 case "${PP_SCHEDULE}" in
     natural|gpipe|1f1b|1f1b-interleaved)
@@ -62,7 +63,7 @@ else
     DP_LOCAL_SGD_INTERVAL=${DP_LOCAL_SGD_INTERVAL:-${ITERATION}}
 fi
 
-OUTPUT_DIR=${SCRIPT_DIR}/${ATTENTION}_${SGD}_${LAYER}_${ITERATION}_${BATCH}_${MICROBATCH}_${SEQUENCE}_${PP_SCHEDULE}_v${PP_VIRTUAL}_sgo${SGO}_ar${ACTIVATION_RECOMPUTE}
+OUTPUT_DIR=${SCRIPT_DIR}/att${ATTENTION}_sgd${SGD}_layer${LAYER}_iter${ITERATION}_batch${BATCH}_micro${MICROBATCH}_seq${SEQUENCE}_dp${DP}_tp${TP}_pp${PP}_sp${SP}_ep${EP}
 
 # Run Symbolic Tensor Graph (STG) Generator for Qwen-32B.
 (
