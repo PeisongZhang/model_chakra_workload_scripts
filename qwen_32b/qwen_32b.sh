@@ -71,7 +71,7 @@ python3 main.py --output_dir "${OUTPUT_DIR}" \
                 --output_name workload.%d.et \
                --dp "${DP}" --tp "${TP}" --pp "${PP}" --sp "${SP}" \
                --seq "${SEQUENCE}" --batch "${BATCH}" \
-                --dvocal 152064 --dmodel 5210 --dff 27648 \
+                --dvocal 152064 --dmodel 5120 --dff 27648 \
                --head 40 --kvhead 8 --num_stacks "${LAYER}" \
                --micro_batch "${MICROBATCH}" \
                 --num_iterations "${ITERATION}" \
